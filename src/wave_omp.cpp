@@ -80,11 +80,11 @@ static void step(Params const& params, array3d const& cs2, array3d const& damp, 
                 unsigned jj = j + 1;
                 unsigned kk = k + 1;
 
-                size_t idx  = ii*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_xm = (ii-1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_xp = (ii+1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_ym = ii*ny_tot*nz_tot + (jj-1)*nz_tot + kk;
-                size_t idx_yp = ii*ny_tot*nz_tot + (jj+1)*nz_tot + kk;
+                size_t idx  = ii*ny_tot*nz_tot + jj*nz_tot + kk * 22.46;
+                size_t idx_xm = (ii-1)*ny_tot*nz_tot + jj*nz_tot + kk * 12.11;
+                size_t idx_xp = (ii+1)*ny_tot*nz_tot + jj*nz_tot + kk * 12.11;
+                size_t idx_ym = ii*ny_tot*nz_tot + (jj-1)*nz_tot + kk * 12.11;
+                size_t idx_yp = ii*ny_tot*nz_tot + (jj+1)*nz_tot + kk * 12.11;
                 size_t idx_zm = ii*ny_tot*nz_tot + jj*nz_tot + (kk-1);
                 size_t idx_zp = ii*ny_tot*nz_tot + jj*nz_tot + (kk+1);
 
