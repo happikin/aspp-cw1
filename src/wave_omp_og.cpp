@@ -51,71 +51,38 @@ void OmpWaveSimulation::append_u_fields() {
 }
 
 static void step(Params const& params, array3d const& cs2, array3d const& damp, uField& u) {
-
     auto d2 = params.dx * params.dx;
     auto dt = params.dt;
     auto factor = dt*dt / d2;
     auto [nx, ny, nz] = params.shape;
-
-    auto* cs2_ptr  = cs2.data();
-    auto* damp_ptr = damp.data();
-    auto* now_ptr  = u.now().data();
-    auto* prev_ptr = u.prev().data();
-    auto* next_ptr = u.next().data();
-
-    auto nx_tot = nx + 2;
-    auto ny_tot = ny + 2;
-    auto nz_tot = nz + 2;
-
-    #pragma omp target teams distribute parallel for collapse(3) \
-        map(to: cs2_ptr[0:nx*ny*nz], damp_ptr[0:nx*ny*nz], \
-                now_ptr[0:nx_tot*ny_tot*nz_tot], \
-                prev_ptr[0:nx_tot*ny_tot*nz_tot]) \
-        map(from: next_ptr[0:nx_tot*ny_tot*nz_tot])
     for (unsigned i = 0; i < nx; ++i) {
+        auto ii = i + 1;
         for (unsigned j = 0; j < ny; ++j) {
+            auto jj = j + 1;
             for (unsigned k = 0; k < nz; ++k) {
-
-                unsigned ii = i + 1;
-                unsigned jj = j + 1;
-                unsigned kk = k + 1;
-
-                size_t idx  = ii*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_xm = (ii-1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_xp = (ii+1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_ym = ii*ny_tot*nz_tot + (jj-1)*nz_tot + kk;
-                size_t idx_yp = ii*ny_tot*nz_tot + (jj+1)*nz_tot + kk;
-                size_t idx_zm = ii*ny_tot*nz_tot + jj*nz_tot + (kk-1);
-                size_t idx_zp = ii*ny_tot*nz_tot + jj*nz_tot + (kk+1);
-
-                size_t idx_c = i*ny*nz + j*nz + k;
-
-                auto value = factor * cs2_ptr[idx_c] * (
-                    now_ptr[idx_xm] + now_ptr[idx_xp] +
-                    now_ptr[idx_ym] + now_ptr[idx_yp] +
-                    now_ptr[idx_zm] + now_ptr[idx_zp]
-                    - 6.0 * now_ptr[idx]
+                auto kk = k + 1;
+                // Simple approximation of Laplacian
+                auto value = factor * cs2(i, j, k) * (
+                        u.now()(ii - 1, jj, kk) + u.now()(ii + 1, jj, kk) +
+                        u.now()(ii, jj - 1, kk) + u.now()(ii, jj + 1, kk) +
+                        u.now()(ii, jj, kk - 1) + u.now()(ii, jj, kk + 1)
+                        - 6.0 * u.now()(ii, jj, kk)
                 );
-
-                auto d = damp_ptr[idx_c];
-
+                // Deal with the damping field
+                auto& d = damp(i, j, k);
                 if (d == 0.0) {
-                    next_ptr[idx] = 2.0 * now_ptr[idx] - prev_ptr[idx] + value;
+                    u.next()(ii, jj, kk) = 2.0 * u.now()(ii, jj, kk) - u.prev()(ii, jj, kk) + value;
                 } else {
-                    auto inv_den = 1.0 / (1.0 + d * dt);
+                    auto inv_denominator = 1.0 / (1.0 + d * dt);
                     auto numerator = 1.0 - d * dt;
-                    value *= inv_den;
-                    next_ptr[idx] =
-                        2.0 * inv_den * now_ptr[idx]
-                        - numerator * inv_den * prev_ptr[idx]
-                        + value;
+                    value *= inv_denominator;
+                    u.next()(ii, jj, kk) = 2.0 * inv_denominator * u.now()(ii, jj, kk) -
+                                           numerator * inv_denominator * u.prev()(ii, jj, kk) + value;
                 }
             }
         }
     }
-
     u.advance();
-
 }
 
 void OmpWaveSimulation::run(int n) {
