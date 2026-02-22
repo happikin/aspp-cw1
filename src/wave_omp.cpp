@@ -9,11 +9,43 @@
 // object below, in `from_cpu_sim`.
 struct OmpImplementationData {
     // Add any data members you need here
+    std::size_t m_nx;
+    std::size_t m_ny;
+    std::size_t m_nz;
+    double      m_factor;
+    double      m_d2;
+    double      m_dt;
+    double*     m_now_ptr;
+    double*     m_prev_ptr;
+    double*     m_next_ptr;
+    double*     m_cs2_ptr;
+    double*     m_damp_ptr;
+    OmpImplementationData(
+        OmpWaveSimulation& _omp_wave
+    ) {
+        auto [nx, ny, nz] = _omp_wave.params.shape;
+        m_nx = nx; m_ny = ny; m_nz = nz;
 
-    OmpImplementationData() {
+        m_cs2_ptr  = _omp_wave.cs2.data();
+        m_damp_ptr = _omp_wave.damp.data();
+
     }
     ~OmpImplementationData() {
-   }
+    }
+    std::size_t interior_size() const { return ( m_nx * m_ny * m_nz ); }
+    std::size_t total_size() const { return ( (m_nx + 2) * (m_ny + 2) * (m_nz + 2) ); }
+    void pack_params(
+        double* _now, double* _prev, 
+        double* _next, Params& _params
+    ) {
+        m_now_ptr   = _now;
+        m_prev_ptr  = _prev;
+        m_next_ptr  = _next;
+
+        m_d2 = _params.dx * _params.dx;
+        m_dt = _params.dt;
+        m_factor    = m_dt * m_dt / m_d2;
+    }
 };
 
 OmpWaveSimulation::OmpWaveSimulation() = default;
@@ -52,99 +84,128 @@ void OmpWaveSimulation::append_u_fields() {
 
 static
 void step(
-    Params const& params,
-    array3d const& cs2,
-    array3d const& damp, uField& u
+    std::unique_ptr<OmpImplementationData>& _impl
 ) {
+    auto nx         = _impl->m_nx;
+    auto ny         = _impl->m_ny;
+    auto nz         = _impl->m_nz;
 
+    auto nx_tot     = _impl->m_nx + 2;
+    auto ny_tot     = _impl->m_ny + 2;
+    auto nz_tot     = _impl->m_nz + 2;
+
+    auto* now_ptr   = _impl->m_now_ptr;
+    auto* prev_ptr  = _impl->m_prev_ptr;
+    auto* next_ptr  = _impl->m_next_ptr;
+    auto* cs2_ptr   = _impl->m_cs2_ptr;
+    auto* damp_ptr  = _impl->m_damp_ptr;
+
+    auto factor     = _impl->m_factor;
+    auto dt         = _impl->m_dt;
+    
+    #pragma omp target teams distribute parallel for collapse(3) \
+        num_teams(30), thread_limit(128) // can be hardcoded for H/W specific use case
+        // is_device_ptr(cs2_ptr, damp_ptr, now_ptr, prev_ptr, next_ptr) // hurts the omp mapping of pointers
+
+    for (unsigned i = 0; i < nx; ++i) {
+        for (unsigned j = 0; j < ny; ++j) {
+            for (unsigned k = 0; k < nz; ++k) {
+
+                unsigned ii = i + 1;
+                unsigned jj = j + 1;
+                unsigned kk = k + 1;
+
+                size_t idx  = ii*ny_tot*nz_tot + jj*nz_tot + kk;
+                size_t idx_xm = (ii-1)*ny_tot*nz_tot + jj*nz_tot + kk;
+                size_t idx_xp = (ii+1)*ny_tot*nz_tot + jj*nz_tot + kk;
+                size_t idx_ym = ii*ny_tot*nz_tot + (jj-1)*nz_tot + kk;
+                size_t idx_yp = ii*ny_tot*nz_tot + (jj+1)*nz_tot + kk;
+                size_t idx_zm = ii*ny_tot*nz_tot + jj*nz_tot + (kk-1);
+                size_t idx_zp = ii*ny_tot*nz_tot + jj*nz_tot + (kk+1);
+
+                size_t idx_c = i*ny*nz + j*nz + k;
+
+                auto value = factor * cs2_ptr[idx_c] * (
+                    now_ptr[idx_xm] + now_ptr[idx_xp] +
+                    now_ptr[idx_ym] + now_ptr[idx_yp] +
+                    now_ptr[idx_zm] + now_ptr[idx_zp]
+                    - 6.0 * now_ptr[idx]
+                );
+
+                auto d = damp_ptr[idx_c];
+
+                if (d == 0.0) {
+                    next_ptr[idx] =
+                        2.0 * now_ptr[idx]
+                        - prev_ptr[idx]
+                        + value;
+                } else {
+                    auto inv_den = 1.0 / (1.0 + d * dt);
+                    auto numerator = 1.0 - d * dt;
+                    value *= inv_den;
+
+                    next_ptr[idx] =
+                        2.0 * inv_den * now_ptr[idx]
+                        - numerator * inv_den * prev_ptr[idx]
+                        + value;
+                }
+            }
+        }
+    }
 }
 
 void OmpWaveSimulation::run(int n) {
 
-    auto [nx, ny, nz] = params.shape;
+    m_impl = std::make_unique<OmpImplementationData>(*this);
+    
+    // auto nx_tot = m_nx + 2;
+    // auto ny_tot = m_ny + 2;
+    // auto nz_tot = m_nz + 2;
 
-    auto* cs2_ptr  = cs2.data();
-    auto* damp_ptr = damp.data();
-
-    auto nx_tot = nx + 2;
-    auto ny_tot = ny + 2;
-    auto nz_tot = nz + 2;
-
-    size_t interior_size = nx * ny * nz;
-    size_t total_size = nx_tot * ny_tot * nz_tot;
+    size_t interior_size = m_impl->interior_size();
+    size_t total_size = m_impl->total_size();
 
     // Capture all 3 buffers ONCE (underlying memory never moves)
     auto* buf0 = u.now().data();
     auto* buf1 = u.prev().data();
     auto* buf2 = u.next().data();
 
-    #pragma omp target data \
-        map(to: cs2_ptr[0:interior_size], \
-                damp_ptr[0:interior_size]) \
-        map(tofrom: buf0[0:total_size], \
-                    buf1[0:total_size], \
-                    buf2[0:total_size])
+    // ---- OMP Data Movement ---- //
+    #pragma omp target data                 \
+    map(                                    \
+        to:                                 \
+            cs2_ptr[0:interior_size],       \
+            damp_ptr[0:interior_size]       \
+    )                                       \
+    map(                                    \
+        tofrom:                             \
+            buf0[0:total_size],             \
+            buf1[0:total_size],             \
+            buf2[0:total_size]              \
+    )
+    // --------------------------- //
     {
         for (int t = 0; t < n; ++t) {
 
             // Fetch correct rotating roles each timestep
-            auto* now_ptr  = u.now().data();
-            auto* prev_ptr = u.prev().data();
-            auto* next_ptr = u.next().data();
+            // auto* now_ptr  = u.now().data();
+            // auto* prev_ptr = u.prev().data();
+            // auto* next_ptr = u.next().data();
 
-            auto d2 = params.dx * params.dx;
-            auto dt = params.dt;
-            auto factor = dt * dt / d2;
+            // auto d2 = params.dx * params.dx;
+            // auto dt = params.dt;
+            // auto factor = dt * dt / d2;
 
-            #pragma omp target teams distribute parallel for collapse(3) \
-                num_teams(30), thread_limit(128)
-                // is_device_ptr(cs2_ptr, damp_ptr, now_ptr, prev_ptr, next_ptr)
+            m_impl->pack_params(
+                u.now().data(),
+                u.prev().data(),
+                u.next().data(),
+                params
+            );
 
-            for (unsigned i = 0; i < nx; ++i) {
-                for (unsigned j = 0; j < ny; ++j) {
-                    for (unsigned k = 0; k < nz; ++k) {
-
-                        unsigned ii = i + 1;
-                        unsigned jj = j + 1;
-                        unsigned kk = k + 1;
-
-                        size_t idx  = ii*ny_tot*nz_tot + jj*nz_tot + kk;
-                        size_t idx_xm = (ii-1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                        size_t idx_xp = (ii+1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                        size_t idx_ym = ii*ny_tot*nz_tot + (jj-1)*nz_tot + kk;
-                        size_t idx_yp = ii*ny_tot*nz_tot + (jj+1)*nz_tot + kk;
-                        size_t idx_zm = ii*ny_tot*nz_tot + jj*nz_tot + (kk-1);
-                        size_t idx_zp = ii*ny_tot*nz_tot + jj*nz_tot + (kk+1);
-
-                        size_t idx_c = i*ny*nz + j*nz + k;
-
-                        auto value = factor * cs2_ptr[idx_c] * (
-                            now_ptr[idx_xm] + now_ptr[idx_xp] +
-                            now_ptr[idx_ym] + now_ptr[idx_yp] +
-                            now_ptr[idx_zm] + now_ptr[idx_zp]
-                            - 6.0 * now_ptr[idx]
-                        );
-
-                        auto d = damp_ptr[idx_c];
-
-                        if (d == 0.0) {
-                            next_ptr[idx] =
-                                2.0 * now_ptr[idx]
-                                - prev_ptr[idx]
-                                + value;
-                        } else {
-                            auto inv_den = 1.0 / (1.0 + d * dt);
-                            auto numerator = 1.0 - d * dt;
-                            value *= inv_den;
-
-                            next_ptr[idx] =
-                                2.0 * inv_den * now_ptr[idx]
-                                - numerator * inv_den * prev_ptr[idx]
-                                + value;
-                        }
-                    }
-                }
-            }
+            // ---- OMP GPU Offloading ---- //
+            step(m_impl);
+            // ---------------------------- //
 
             u.advance();   //  single rotation authority
         }
