@@ -16,7 +16,7 @@ struct OmpWaveSimulation : WaveSimulation {
     }
 
     // Pointer to any data needed for OpenMP implementation
-    std::unique_ptr<OmpImplementationData> impl;
+    std::unique_ptr<OmpImplementationData> m_impl;
 
     // Initialise the object as a copy of a CPU state
     static OmpWaveSimulation from_cpu_sim(fs::path const& cp, WaveSimulation const& source);
