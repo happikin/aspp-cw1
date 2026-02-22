@@ -50,112 +50,64 @@ void OmpWaveSimulation::append_u_fields() {
     h5.append_u(u);
 }
 
-static void step(Params const& params, array3d const& cs2, array3d const& damp, uField& u) {
+static
+void step(
+    Params const& params,
+    array3d const& cs2,
+    array3d const& damp, uField& u
+) {
 
-    auto d2 = params.dx * params.dx;
-    auto dt = params.dt;
-    auto factor = dt*dt / d2;
+}
+
+void OmpWaveSimulation::run(int n) {
+
     auto [nx, ny, nz] = params.shape;
 
     auto* cs2_ptr  = cs2.data();
     auto* damp_ptr = damp.data();
-    auto* now_ptr  = u.now().data();
-    auto* prev_ptr = u.prev().data();
-    auto* next_ptr = u.next().data();
 
     auto nx_tot = nx + 2;
     auto ny_tot = ny + 2;
     auto nz_tot = nz + 2;
 
-    #pragma omp target teams distribute parallel for collapse(3) \
-        map(to: cs2_ptr[0:nx*ny*nz], damp_ptr[0:nx*ny*nz], \
-                now_ptr[0:nx_tot*ny_tot*nz_tot], \
-                prev_ptr[0:nx_tot*ny_tot*nz_tot]) \
-        map(from: next_ptr[0:nx_tot*ny_tot*nz_tot])
-    for (unsigned i = 0; i < nx; ++i) {
-        for (unsigned j = 0; j < ny; ++j) {
-            for (unsigned k = 0; k < nz; ++k) {
+    size_t interior_size = nx * ny * nz;
+    size_t total_size = nx_tot * ny_tot * nz_tot;
 
-                unsigned ii = i + 1;
-                unsigned jj = j + 1;
-                unsigned kk = k + 1;
-                
-                size_t idx  = ii*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_xm = (ii-1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_xp = (ii+1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_ym = ii*ny_tot*nz_tot + (jj-1)*nz_tot + kk;
-                size_t idx_yp = ii*ny_tot*nz_tot + (jj+1)*nz_tot + kk;
-                size_t idx_zm = ii*ny_tot*nz_tot + jj*nz_tot + (kk-1);
-                size_t idx_zp = ii*ny_tot*nz_tot + jj*nz_tot + (kk+1);
+    // Capture all 3 buffers ONCE (underlying memory never moves)
+    auto* buf0 = u.now().data();
+    auto* buf1 = u.prev().data();
+    auto* buf2 = u.next().data();
 
-                size_t idx_c = i*ny*nz + j*nz + k;
+    #pragma omp target data \
+        map(to: cs2_ptr[0:interior_size], \
+                damp_ptr[0:interior_size]) \
+        map(tofrom: buf0[0:total_size], \
+                    buf1[0:total_size], \
+                    buf2[0:total_size])
+    {
+        for (int t = 0; t < n; ++t) {
 
-                auto value = factor * cs2_ptr[idx_c] * (
-                    now_ptr[idx_xm] + now_ptr[idx_xp] +
-                    now_ptr[idx_ym] + now_ptr[idx_yp] +
-                    now_ptr[idx_zm] + now_ptr[idx_zp]
-                    - 6.0 * now_ptr[idx]
-                );
+            // Fetch correct rotating roles each timestep
+            auto* now_ptr  = u.now().data();
+            auto* prev_ptr = u.prev().data();
+            auto* next_ptr = u.next().data();
 
-                auto d = damp_ptr[idx_c];
+            auto d2 = params.dx * params.dx;
+            auto dt = params.dt;
+            auto factor = dt * dt / d2;
 
-                if (d == 0.0) {
-                    next_ptr[idx] = 2.0 * now_ptr[idx] - prev_ptr[idx] + value;
-                } else {
-                    auto inv_den = 1.0 / (1.0 + d * dt);
-                    auto numerator = 1.0 - d * dt;
-                    value *= inv_den;
-                    next_ptr[idx] =
-                        2.0 * inv_den * now_ptr[idx]
-                        - numerator * inv_den * prev_ptr[idx]
-                        + value;
-                }
-            }
-        }
-    }
+            #pragma omp target teams distribute parallel for collapse(3) \
+                num_teams(30), thread_limit(128)
+                // is_device_ptr(cs2_ptr, damp_ptr, now_ptr, prev_ptr, next_ptr)
 
-    u.advance();
-
-}
-
-void OmpWaveSimulation::run(int n) {
-    for (int i = 0; i < n; ++i) {
-        // step(params, cs2, damp, u);
-        // ---- manually inlining step function ---- //
-
-        auto d2 = params.dx * params.dx;
-        auto dt = params.dt;
-        auto factor = dt*dt / d2;
-        auto [nx, ny, nz] = params.shape;
-
-        auto* cs2_ptr  = cs2.data();
-        auto* damp_ptr = damp.data();
-        auto* now_ptr  = u.now().data();
-        auto* prev_ptr = u.prev().data();
-        auto* next_ptr = u.next().data();
-
-        auto nx_tot = nx + 2;
-        auto ny_tot = ny + 2;
-        auto nz_tot = nz + 2;
-
-        #pragma omp target data \
-        map(to: \
-            cs2_ptr[0:nx*ny*nz], \
-            damp_ptr[0:nx*ny*nz], \
-            now_ptr[0:nx_tot*ny_tot*nz_tot], \
-            prev_ptr[0:nx_tot*ny_tot*nz_tot]) \
-        map(from: \
-            next_ptr[0:nx_tot*ny_tot*nz_tot])
-        {
-            #pragma omp target teams distribute parallel for collapse(3)
             for (unsigned i = 0; i < nx; ++i) {
                 for (unsigned j = 0; j < ny; ++j) {
                     for (unsigned k = 0; k < nz; ++k) {
-    
+
                         unsigned ii = i + 1;
                         unsigned jj = j + 1;
                         unsigned kk = k + 1;
-                        
+
                         size_t idx  = ii*ny_tot*nz_tot + jj*nz_tot + kk;
                         size_t idx_xm = (ii-1)*ny_tot*nz_tot + jj*nz_tot + kk;
                         size_t idx_xp = (ii+1)*ny_tot*nz_tot + jj*nz_tot + kk;
@@ -163,24 +115,28 @@ void OmpWaveSimulation::run(int n) {
                         size_t idx_yp = ii*ny_tot*nz_tot + (jj+1)*nz_tot + kk;
                         size_t idx_zm = ii*ny_tot*nz_tot + jj*nz_tot + (kk-1);
                         size_t idx_zp = ii*ny_tot*nz_tot + jj*nz_tot + (kk+1);
-    
+
                         size_t idx_c = i*ny*nz + j*nz + k;
-    
+
                         auto value = factor * cs2_ptr[idx_c] * (
                             now_ptr[idx_xm] + now_ptr[idx_xp] +
                             now_ptr[idx_ym] + now_ptr[idx_yp] +
                             now_ptr[idx_zm] + now_ptr[idx_zp]
                             - 6.0 * now_ptr[idx]
                         );
-    
+
                         auto d = damp_ptr[idx_c];
-    
+
                         if (d == 0.0) {
-                            next_ptr[idx] = 2.0 * now_ptr[idx] - prev_ptr[idx] + value;
+                            next_ptr[idx] =
+                                2.0 * now_ptr[idx]
+                                - prev_ptr[idx]
+                                + value;
                         } else {
                             auto inv_den = 1.0 / (1.0 + d * dt);
                             auto numerator = 1.0 - d * dt;
                             value *= inv_den;
+
                             next_ptr[idx] =
                                 2.0 * inv_den * now_ptr[idx]
                                 - numerator * inv_den * prev_ptr[idx]
@@ -189,15 +145,8 @@ void OmpWaveSimulation::run(int n) {
                     }
                 }
             }
-    
-            
-            u.advance();
+
+            u.advance();   //  single rotation authority
         }
-
-
-
-        // ----------------------------------------- //
-
-
     }
 }
