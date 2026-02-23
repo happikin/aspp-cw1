@@ -106,13 +106,14 @@ void step(
     
     auto stride_x = ny_tot*nz_tot;
     auto stride_y = nz_tot;
-    int idx_c_max = nx * ny * nz;
+    int index_max = (int)(nx * ny * nz);
+
     #pragma omp target teams distribute parallel for
-    for (int idx_c = 0; idx_c < idx_c_max; idx_c++) {
+    for (int index = 0; index < index_max; ++index) {
 
         // Recover 3D indices
-        std::size_t i = idx_c / (ny * nz);
-        std::size_t rem = idx_c % (ny * nz);
+        std::size_t i = index / (ny * nz);
+        std::size_t rem = index % (ny * nz);
         std::size_t j = rem / nz;
         std::size_t k = rem % nz;
 
@@ -128,14 +129,14 @@ void step(
         std::size_t idx_zm = ii*stride_x + jj*stride_y + (kk-1);
         std::size_t idx_zp = ii*stride_x + jj*stride_y + (kk+1);
 
-        auto value = factor * cs2_ptr[idx_c] * (
+        auto value = factor * cs2_ptr[index] * (
             now_ptr[idx_xm] + now_ptr[idx_xp] +
             now_ptr[idx_ym] + now_ptr[idx_yp] +
             now_ptr[idx_zm] + now_ptr[idx_zp]
             - 6.0 * now_ptr[idx]
         );
 
-        auto d = damp_ptr[idx_c];
+        auto d = damp_ptr[index];
 
         if (d == 0.0) {
             next_ptr[idx] =
