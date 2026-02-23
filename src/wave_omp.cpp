@@ -104,9 +104,12 @@ void step(
     auto factor     = _impl->m_factor;
     auto dt         = _impl->m_dt;
     
+    auto stride_x = ny_tot*nz_tot;
+    auto stride_y = nz_tot;
+
     #pragma omp target teams distribute     \
-    parallel for collapse(3) /*simd*/           //\
-    num_teams(30), thread_limit(128)
+    parallel for simd collapse(3)
+    // num_teams(30), thread_limit(128)
     for (unsigned i = 0; i < nx; ++i) {
         for (unsigned j = 0; j < ny; ++j) {
             for (unsigned k = 0; k < nz; ++k) {
@@ -115,13 +118,13 @@ void step(
                 unsigned jj = j + 1;
                 unsigned kk = k + 1;
 
-                size_t idx  = ii*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_xm = (ii-1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_xp = (ii+1)*ny_tot*nz_tot + jj*nz_tot + kk;
-                size_t idx_ym = ii*ny_tot*nz_tot + (jj-1)*nz_tot + kk;
-                size_t idx_yp = ii*ny_tot*nz_tot + (jj+1)*nz_tot + kk;
-                size_t idx_zm = ii*ny_tot*nz_tot + jj*nz_tot + (kk-1);
-                size_t idx_zp = ii*ny_tot*nz_tot + jj*nz_tot + (kk+1);
+                size_t idx  = ii*stride_x + jj*stride_y + kk;
+                size_t idx_xm = (ii-1)*stride_x + jj*stride_y + kk;
+                size_t idx_xp = (ii+1)*stride_x + jj*stride_y + kk;
+                size_t idx_ym = ii*stride_x + (jj-1)*stride_y + kk;
+                size_t idx_yp = ii*stride_x + (jj+1)*stride_y + kk;
+                size_t idx_zm = ii*stride_x + jj*stride_y + (kk-1);
+                size_t idx_zp = ii*stride_x + jj*stride_y + (kk+1);
 
                 size_t idx_c = i*ny*nz + j*nz + k;
 
