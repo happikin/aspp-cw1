@@ -107,54 +107,54 @@ void step(
     auto stride_x = ny_tot*nz_tot;
     auto stride_y = nz_tot;
 
-    #pragma omp target teams distribute     \
-    parallel for simd collapse(3)
-    // num_teams(30), thread_limit(128)
-    for (unsigned i = 0; i < nx; ++i) {
-        for (unsigned j = 0; j < ny; ++j) {
-            for (unsigned k = 0; k < nz; ++k) {
+    #pragma omp target teams distribute parallel for simd \
+        thread_limit(256) // potentially help on A100 but not certain
+    for (std::size_t idx_c = 0; idx_c < nx * ny * nz; ++idx_c) {
 
-                unsigned ii = i + 1;
-                unsigned jj = j + 1;
-                unsigned kk = k + 1;
+        // Recover 3D indices
+        std::size_t i = idx_c / (ny * nz);
+        std::size_t rem = idx_c % (ny * nz);
+        std::size_t j = rem / nz;
+        std::size_t k = rem % nz;
 
-                size_t idx  = ii*stride_x + jj*stride_y + kk;
-                size_t idx_xm = (ii-1)*stride_x + jj*stride_y + kk;
-                size_t idx_xp = (ii+1)*stride_x + jj*stride_y + kk;
-                size_t idx_ym = ii*stride_x + (jj-1)*stride_y + kk;
-                size_t idx_yp = ii*stride_x + (jj+1)*stride_y + kk;
-                size_t idx_zm = ii*stride_x + jj*stride_y + (kk-1);
-                size_t idx_zp = ii*stride_x + jj*stride_y + (kk+1);
+        unsigned ii = i + 1;
+        unsigned jj = j + 1;
+        unsigned kk = k + 1;
 
-                size_t idx_c = i*ny*nz + j*nz + k;
+        std::size_t idx  = ii*stride_x + jj*stride_y + kk;
+        std::size_t idx_xm = (ii-1)*stride_x + jj*stride_y + kk;
+        std::size_t idx_xp = (ii+1)*stride_x + jj*stride_y + kk;
+        std::size_t idx_ym = ii*stride_x + (jj-1)*stride_y + kk;
+        std::size_t idx_yp = ii*stride_x + (jj+1)*stride_y + kk;
+        std::size_t idx_zm = ii*stride_x + jj*stride_y + (kk-1);
+        std::size_t idx_zp = ii*stride_x + jj*stride_y + (kk+1);
 
-                auto value = factor * cs2_ptr[idx_c] * (
-                    now_ptr[idx_xm] + now_ptr[idx_xp] +
-                    now_ptr[idx_ym] + now_ptr[idx_yp] +
-                    now_ptr[idx_zm] + now_ptr[idx_zp]
-                    - 6.0 * now_ptr[idx]
-                );
+        auto value = factor * cs2_ptr[idx_c] * (
+            now_ptr[idx_xm] + now_ptr[idx_xp] +
+            now_ptr[idx_ym] + now_ptr[idx_yp] +
+            now_ptr[idx_zm] + now_ptr[idx_zp]
+            - 6.0 * now_ptr[idx]
+        );
 
-                auto d = damp_ptr[idx_c];
+        auto d = damp_ptr[idx_c];
 
-                if (d == 0.0) {
-                    next_ptr[idx] =
-                        2.0 * now_ptr[idx]
-                        - prev_ptr[idx]
-                        + value;
-                } else {
-                    auto inv_den = 1.0 / (1.0 + d * dt);
-                    auto numerator = 1.0 - d * dt;
-                    value *= inv_den;
+        if (d == 0.0) {
+            next_ptr[idx] =
+                2.0 * now_ptr[idx]
+                - prev_ptr[idx]
+                + value;
+        } else {
+            auto inv_den = 1.0 / (1.0 + d * dt);
+            auto numerator = 1.0 - d * dt;
+            value *= inv_den;
 
-                    next_ptr[idx] =
-                        2.0 * inv_den * now_ptr[idx]
-                        - numerator * inv_den * prev_ptr[idx]
-                        + value;
-                }
-            }
+            next_ptr[idx] =
+                2.0 * inv_den * now_ptr[idx]
+                - numerator * inv_den * prev_ptr[idx]
+                + value;
         }
     }
+
 }
 
 void OmpWaveSimulation::run(int n) {
