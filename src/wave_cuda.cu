@@ -81,20 +81,20 @@ void step_kernel(
 // object below, in `from_cpu_sim`.
 struct CudaImplementationData {
     // Add any data members you need here, such as device arrays, streams, etc
-    double* d_buf[3];
-    double* d_cs2;
-    double* d_damp;
+    double*         d_buf[3];
+    double*         d_cs2;
+    double*         d_damp;
     
-    std::size_t m_nx;
-    std::size_t m_ny;
-    std::size_t m_nz;
+    std::size_t     m_nx;
+    std::size_t     m_ny;
+    std::size_t     m_nz;
 
     WaveSimulation& m_wave_cuda;
-    size_t m_total_size;
-    size_t m_interior_size;
-    double m_factor;
-    double m_d2;
-    double m_dt;
+    size_t          m_total_size;
+    size_t          m_interior_size;
+    double          m_factor;
+    double          m_d2;
+    double          m_dt;
 
     CudaImplementationData(
         WaveSimulation& _wave_cuda
@@ -153,6 +153,7 @@ struct CudaImplementationData {
 
             } break;
             case CudaWaveSimulation::memcpy_mode_e::to_host: {
+
                 auto [_cur, _prev, _next] = _indices;
                 cudaMemcpy(m_wave_cuda.u.now().data(), d_buf[_cur],  
                     m_total_size*sizeof(double), cudaMemcpyDeviceToHost
@@ -165,26 +166,11 @@ struct CudaImplementationData {
                 );
                 
             } break;
-            default: {}
+            default: { /* ---- */ }
         }
 
     }
 
-    void copy_back(
-        uField & _u, std::tuple<int,int,int>&& _indices
-    ) {
-        auto [_cur, _prev, _next] = _indices;
-        cudaMemcpy(_u.now().data(), d_buf[_cur],  
-            m_total_size*sizeof(double), cudaMemcpyDeviceToHost
-        );
-        cudaMemcpy(_u.prev().data(),d_buf[_prev], 
-            m_total_size*sizeof(double), cudaMemcpyDeviceToHost
-        );
-        cudaMemcpy(_u.next().data(),d_buf[_next], 
-            m_total_size*sizeof(double), cudaMemcpyDeviceToHost
-        );
-        
-    }
     ~CudaImplementationData() {
 
         // ---- Free memory ---- //
@@ -235,7 +221,7 @@ void CudaWaveSimulation::run(int n)
 {
     impl->memcpy(memcpy_mode_e::to_device);
 
-    // ---- Role indices ---- //
+    // ---- Rotate indices ---- //
     int cur  = 0;
     int prev = 1;
     int next = 2;

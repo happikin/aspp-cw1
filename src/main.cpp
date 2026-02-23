@@ -174,7 +174,7 @@ int main(int argc, char const* argv[]) {
                     for (unsigned k = 0; k < N; ++k) {
                         if (!approxEq(ref_u(i, j, k), test_u(i, j, k), eps)) {
                             nerr += 1;
-                            out("Fields differ at ({}, {}, {})", i, j, k);
+                            // out("Fields differ at ({}, {}, {})", i, j, k);
                         }
                     }
                 }
