@@ -107,8 +107,8 @@ void step(
     auto stride_x = ny_tot*nz_tot;
     auto stride_y = nz_tot;
 
-    #pragma omp target teams distribute parallel for simd \
-        thread_limit(256) // potentially help on A100 but not certain
+    #pragma omp target teams distribute parallel for simd //\
+        // thread_limit(256) // potentially help on A100 but not certain
     for (std::size_t idx_c = 0; idx_c < nx * ny * nz; ++idx_c) {
 
         // Recover 3D indices
