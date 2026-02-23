@@ -72,7 +72,8 @@ OmpWaveSimulation OmpWaveSimulation::from_cpu_sim(const fs::path& cp, const Wave
     ans.append_u_fields();
 
     // Perhaps you want to do some device set up now?
-    // ans.impl = std::make_unique<OmpImplementationData>();
+    ans.m_impl
+        = std::make_unique<OmpImplementationData>(ans);
 
     return ans;
 }
@@ -103,10 +104,9 @@ void step(
     auto factor     = _impl->m_factor;
     auto dt         = _impl->m_dt;
     
-    #pragma omp target teams distribute parallel for collapse(3) \
-        num_teams(30), thread_limit(128) // can be hardcoded for H/W specific use case
-        // is_device_ptr(cs2_ptr, damp_ptr, now_ptr, prev_ptr, next_ptr) // hurts the omp mapping of pointers
-
+    #pragma omp target teams distribute     \
+    parallel for collapse(3) /*simd*/           //\
+    num_teams(30), thread_limit(128)
     for (unsigned i = 0; i < nx; ++i) {
         for (unsigned j = 0; j < ny; ++j) {
             for (unsigned k = 0; k < nz; ++k) {
@@ -156,16 +156,10 @@ void step(
 
 void OmpWaveSimulation::run(int n) {
 
-    m_impl = std::make_unique<OmpImplementationData>(*this);
-    
-    // auto nx_tot = m_nx + 2;
-    // auto ny_tot = m_ny + 2;
-    // auto nz_tot = m_nz + 2;
-
     size_t interior_size = m_impl->interior_size();
     size_t total_size = m_impl->total_size();
 
-    // Capture all 3 buffers ONCE (underlying memory never moves)
+    /* Capture all 3 buffers ONCE (underlying memory never moves) */
     auto* buf0 = u.now().data();
     auto* buf1 = u.prev().data();
     auto* buf2 = u.next().data();
@@ -187,27 +181,20 @@ void OmpWaveSimulation::run(int n) {
     {
         for (int t = 0; t < n; ++t) {
 
-            // Fetch correct rotating roles each timestep
-            // auto* now_ptr  = u.now().data();
-            // auto* prev_ptr = u.prev().data();
-            // auto* next_ptr = u.next().data();
-
-            // auto d2 = params.dx * params.dx;
-            // auto dt = params.dt;
-            // auto factor = dt * dt / d2;
-
+            // ---- Prep Args ---- //
             m_impl->pack_params(
                 u.now().data(),
                 u.prev().data(),
                 u.next().data(),
                 params
             );
+            // ------------------- //
 
             // ---- OMP GPU Offloading ---- //
             step(m_impl);
             // ---------------------------- //
 
-            u.advance();   //  single rotation authority
+            u.advance();
         }
     }
 }
