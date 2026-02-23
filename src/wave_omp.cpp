@@ -106,9 +106,9 @@ void step(
     
     auto stride_x = ny_tot*nz_tot;
     auto stride_y = nz_tot;
-
+    int idx_c_max = nx * ny * nz;
     #pragma omp target teams distribute parallel for
-    for (int idx_c = 0; idx_c < nx * ny * nz; ++idx_c) {
+    for (int idx_c = 0; idx_c < idx_c_max; ++idx_c) {
 
         // Recover 3D indices
         std::size_t i = idx_c / (ny * nz);
