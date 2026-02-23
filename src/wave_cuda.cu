@@ -6,6 +6,10 @@
 
 #include <nvtx3/nvtx3.hpp>
 
+// ---- memcpy type ---- //
+enum class memcpy_mode_e { to_device, to_host };
+// --------------------- //
+
 // ---- CUDA Step Kernel ---- //
 __global__
 void step_kernel(
@@ -126,11 +130,11 @@ struct CudaImplementationData {
     }
 
     void memcpy(
-        const CudaWaveSimulation::memcpy_mode_e&& _copy_mode,
+        const memcpy_mode_e&& _copy_mode,
         std::tuple<int,int,int>&& _indices = {0,1,2}
     ) {
         switch(_copy_mode) {
-            case CudaWaveSimulation::memcpy_mode_e::to_device: {
+            case memcpy_mode_e::to_device: {
 
                 auto [a, b, c] = _indices;
 
@@ -152,7 +156,7 @@ struct CudaImplementationData {
                 );
 
             } break;
-            case CudaWaveSimulation::memcpy_mode_e::to_host: {
+            case memcpy_mode_e::to_host: {
 
                 auto [_cur, _prev, _next] = _indices;
                 cudaMemcpy(m_wave_cuda.u.now().data(), d_buf[_cur],  
