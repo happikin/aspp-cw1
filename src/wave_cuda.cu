@@ -89,7 +89,7 @@ struct CudaImplementationData {
     std::size_t m_ny;
     std::size_t m_nz;
 
-    const WaveSimulation& m_wave_cuda;
+    WaveSimulation& m_wave_cuda;
     size_t m_total_size;
     size_t m_interior_size;
     double m_factor;
@@ -125,20 +125,64 @@ struct CudaImplementationData {
 
     }
 
-    void copy_into() {
-        cudaMemcpy(d_buf[0], m_wave_cuda.u.now().data(),  m_total_size * sizeof(double), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_buf[1], m_wave_cuda.u.prev().data(), m_total_size * sizeof(double), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_buf[2], m_wave_cuda.u.next().data(), m_total_size * sizeof(double), cudaMemcpyHostToDevice);
+    void memcpy(
+        const CudaWaveSimulation::memcpy_mode_e&& _copy_mode,
+        std::tuple<int,int,int>&& _indices = {0,1,2}
+    ) {
+        switch(_copy_mode) {
+            case CudaWaveSimulation::memcpy_mode_e::to_device: {
 
-        cudaMemcpy(d_cs2,  m_wave_cuda.cs2.data(),  m_interior_size * sizeof(double), cudaMemcpyHostToDevice);
-        cudaMemcpy(d_damp, m_wave_cuda.damp.data(), m_interior_size * sizeof(double), cudaMemcpyHostToDevice);
+                auto [a, b, c] = _indices;
+
+                cudaMemcpy(d_buf[a], m_wave_cuda.u.now().data(),  
+                    m_total_size * sizeof(double), cudaMemcpyHostToDevice
+                );
+                cudaMemcpy(d_buf[b], m_wave_cuda.u.prev().data(), 
+                    m_total_size * sizeof(double), cudaMemcpyHostToDevice
+                );
+                cudaMemcpy(d_buf[c], m_wave_cuda.u.next().data(), 
+                    m_total_size * sizeof(double), cudaMemcpyHostToDevice
+                );
+        
+                cudaMemcpy(d_cs2,  m_wave_cuda.cs2.data(),  
+                    m_interior_size * sizeof(double), cudaMemcpyHostToDevice
+                );
+                cudaMemcpy(d_damp, m_wave_cuda.damp.data(), 
+                    m_interior_size * sizeof(double), cudaMemcpyHostToDevice
+                );
+
+            } break;
+            case CudaWaveSimulation::memcpy_mode_e::to_host: {
+                auto [_cur, _prev, _next] = _indices;
+                cudaMemcpy(m_wave_cuda.u.now().data(), d_buf[_cur],  
+                    m_total_size*sizeof(double), cudaMemcpyDeviceToHost
+                );
+                cudaMemcpy(m_wave_cuda.u.prev().data(),d_buf[_prev], 
+                    m_total_size*sizeof(double), cudaMemcpyDeviceToHost
+                );
+                cudaMemcpy(m_wave_cuda.u.next().data(),d_buf[_next], 
+                    m_total_size*sizeof(double), cudaMemcpyDeviceToHost
+                );
+                
+            } break;
+            default: {}
+        }
 
     }
 
-    void copy_back() {
-        // cudaMemcpy(u.now().data(),  d_buf[cur],  total_size*sizeof(double), cudaMemcpyDeviceToHost);
-        // cudaMemcpy(u.prev().data(), d_buf[prev], total_size*sizeof(double), cudaMemcpyDeviceToHost);
-        // cudaMemcpy(u.next().data(), d_buf[next], total_size*sizeof(double), cudaMemcpyDeviceToHost);
+    void copy_back(
+        uField & _u, std::tuple<int,int,int>&& _indices
+    ) {
+        auto [_cur, _prev, _next] = _indices;
+        cudaMemcpy(_u.now().data(), d_buf[_cur],  
+            m_total_size*sizeof(double), cudaMemcpyDeviceToHost
+        );
+        cudaMemcpy(_u.prev().data(),d_buf[_prev], 
+            m_total_size*sizeof(double), cudaMemcpyDeviceToHost
+        );
+        cudaMemcpy(_u.next().data(),d_buf[_next], 
+            m_total_size*sizeof(double), cudaMemcpyDeviceToHost
+        );
         
     }
     ~CudaImplementationData() {
@@ -187,79 +231,9 @@ void CudaWaveSimulation::append_u_fields() {
     h5.append_u(u);
 }
 
-// static void step(Params const& params, array3d const& cs2, array3d const& damp, uField& u) {
-//     nvtx3::scoped_range r{"step"};
-//     auto d2 = params.dx * params.dx;
-//     auto dt = params.dt;
-//     auto factor = dt*dt / d2;
-//     auto [nx, ny, nz] = params.shape;
-//     for (unsigned i = 0; i < nx; ++i) {
-//         auto ii = i + 1;
-//         for (unsigned j = 0; j < ny; ++j) {
-//             auto jj = j + 1;
-//             for (unsigned k = 0; k < nz; ++k) {
-//                 auto kk = k + 1;
-//                 // Simple approximation of Laplacian
-//                 auto value = factor * cs2(i, j, k) * (
-//                         u.now()(ii - 1, jj, kk) + u.now()(ii + 1, jj, kk) +
-//                         u.now()(ii, jj - 1, kk) + u.now()(ii, jj + 1, kk) +
-//                         u.now()(ii, jj, kk - 1) + u.now()(ii, jj, kk + 1)
-//                         - 6.0 * u.now()(ii, jj, kk)
-//                 );
-//                 // Deal with the damping field
-//                 auto& d = damp(i, j, k);
-//                 if (d == 0.0) {
-//                     u.next()(ii, jj, kk) = 2.0 * u.now()(ii, jj, kk) - u.prev()(ii, jj, kk) + value;
-//                 } else {
-//                     auto inv_denominator = 1.0 / (1.0 + d * dt);
-//                     auto numerator = 1.0 - d * dt;
-//                     value *= inv_denominator;
-//                     u.next()(ii, jj, kk) = 2.0 * inv_denominator * u.now()(ii, jj, kk) -
-//                                            numerator * inv_denominator * u.prev()(ii, jj, kk) + value;
-//                 }
-//             }
-//         }
-//     }
-//     u.advance();
-// }
-
 void CudaWaveSimulation::run(int n)
 {
-    // auto [nx, ny, nz] = params.shape;
-
-    // size_t interior_size = nx * ny * nz;
-
-    // size_t nx_tot = nx + 2;
-    // size_t ny_tot = ny + 2;
-    // size_t nz_tot = nz + 2;
-
-    // size_t total_size = nx_tot * ny_tot * nz_tot;
-
-    // double d2 = params.dx * params.dx;
-    // double dt = params.dt;
-    // double factor = (dt * dt) / d2;
-
-    // // ---- Allocate fixed device buffers ---- //
-    // double* d_buf[3];
-    // cudaMalloc(&d_buf[0], total_size * sizeof(double));
-    // cudaMalloc(&d_buf[1], total_size * sizeof(double));
-    // cudaMalloc(&d_buf[2], total_size * sizeof(double));
-
-    // double* d_cs2;
-    // double* d_damp;
-
-    // cudaMalloc(&d_cs2, interior_size * sizeof(double));
-    // cudaMalloc(&d_damp, interior_size * sizeof(double));
-
-    // // ---- Copy initial data ---- //
-    // cudaMemcpy(d_buf[0], u.now().data(),  total_size * sizeof(double), cudaMemcpyHostToDevice);
-    // cudaMemcpy(d_buf[1], u.prev().data(), total_size * sizeof(double), cudaMemcpyHostToDevice);
-    // cudaMemcpy(d_buf[2], u.next().data(), total_size * sizeof(double), cudaMemcpyHostToDevice);
-
-    // cudaMemcpy(d_cs2,  cs2.data(),  interior_size * sizeof(double), cudaMemcpyHostToDevice);
-    // cudaMemcpy(d_damp, damp.data(), interior_size * sizeof(double), cudaMemcpyHostToDevice);
-
-    impl->copy_into();
+    impl->memcpy(memcpy_mode_e::to_device);
 
     // ---- Role indices ---- //
     int cur  = 0;
@@ -305,15 +279,6 @@ void CudaWaveSimulation::run(int n)
                cudaMemcpyDeviceToHost);
 
     // ---- copy back all three buffers to make them persist between run calls ---- //
-    cudaMemcpy(u.now().data(),  impl->d_buf[cur],  impl->m_total_size*sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(u.prev().data(), impl->d_buf[prev], impl->m_total_size*sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(u.next().data(), impl->d_buf[next], impl->m_total_size*sizeof(double), cudaMemcpyDeviceToHost);
+    impl->memcpy(memcpy_mode_e::to_host, {cur, prev, next});
     
-    // ---- Free memory ---- //
-    // cudaFree(d_buf[0]);
-    // cudaFree(d_buf[1]);
-    // cudaFree(d_buf[2]);
-    // cudaFree(d_cs2);
-    // cudaFree(d_damp);
-    // --------------------- //
 }

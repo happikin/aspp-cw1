@@ -11,6 +11,7 @@ struct CudaImplementationData;
 
 /// All data required to run the wave propagation simulation on GPU
 struct CudaWaveSimulation : WaveSimulation {
+    enum class memcpy_mode_e { to_device, to_host };
     inline const char * ID() const override {
         return "CUDA";
     }
