@@ -72,7 +72,7 @@ OmpWaveSimulation OmpWaveSimulation::from_cpu_sim(const fs::path& cp, const Wave
     ans.append_u_fields();
 
     // Perhaps you want to do some device set up now?
-    ans.m_impl
+    ans.impl
         = std::make_unique<OmpImplementationData>(ans);
 
     return ans;
@@ -158,8 +158,8 @@ void step(
 
 void OmpWaveSimulation::run(int n) {
 
-    size_t interior_size = m_impl->interior_size();
-    size_t total_size = m_impl->total_size();
+    size_t interior_size = impl->interior_size();
+    size_t total_size = impl->total_size();
 
     /* Capture all 3 buffers ONCE (underlying memory never moves) */
     auto* buf0 = u.now().data();
@@ -184,7 +184,7 @@ void OmpWaveSimulation::run(int n) {
         for (int t = 0; t < n; ++t) {
 
             // ---- Prep Args ---- //
-            m_impl->pack_params(
+            impl->pack_params(
                 u.now().data(),
                 u.prev().data(),
                 u.next().data(),
@@ -193,7 +193,7 @@ void OmpWaveSimulation::run(int n) {
             // ------------------- //
 
             // ---- OMP GPU Offloading ---- //
-            step(m_impl);
+            step(impl);
             // ---------------------------- //
 
             u.advance();
