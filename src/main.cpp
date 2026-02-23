@@ -147,6 +147,7 @@ int main(int argc, char const* argv[]) {
             for (int i = 0; i < n_chunks; ++i) {
                 auto len = std::min(t + p.out_period, p.nsteps) - t;
                 Time const start = Clock::now();
+                std::printf("WaveSimulation::run(%d)\n", len);
                 state.run(len);
                 Time const stop = Clock::now();
                 std::chrono::duration<float> dt{stop - start};
