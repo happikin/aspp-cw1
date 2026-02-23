@@ -1,67 +1,115 @@
-//
-// Copyright 2026 Rupert Nash, EPCC, University of Edinburgh
-//
+// wave_omp.cpp
+// OpenMP offload implementation for the 3D wave equation.
+
+
 #include "wave_omp.h"
+#include <omp.h>
+#include <stdexcept>
+#include <filesystem>
+#include <memory>
 
-// This struct can hold any data you need to manage running on the device
-//
-// Allocate with std::make_unique when you create the simulation
-// object below, in `from_cpu_sim`.
 struct OmpImplementationData {
-    // Add any data members you need here
-    std::size_t m_nx;
-    std::size_t m_ny;
-    std::size_t m_nz;
-    double      m_factor;
-    double      m_d2;
-    double      m_dt;
-    double*     m_now_ptr;
-    double*     m_prev_ptr;
-    double*     m_next_ptr;
-    double*     m_cs2_ptr;
-    double*     m_damp_ptr;
-    OmpImplementationData(
-        OmpWaveSimulation& _omp_wave
-    ) {
-        auto [nx, ny, nz] = _omp_wave.params.shape;
-        m_nx = nx; m_ny = ny; m_nz = nz;
+    // Device buffers
+    double *d_cs2 = nullptr;    // interior coefficients (no halo)
+    double *d_damp = nullptr;   // interior damping (no halo)
+    double *d_u_prev = nullptr; // padded field (t-1)
+    double *d_u_now  = nullptr; // padded field (t)
+    double *d_u_next = nullptr; // padded field (t+1)
 
-        m_cs2_ptr  = _omp_wave.cs2.data();
-        m_damp_ptr = _omp_wave.damp.data();
+    // Domain sizes (interior + padded)
+    std::size_t nx = 0, ny = 0, nz = 0;
+    std::size_t pnx = 0, pny = 0, pnz = 0;
 
-    }
+    double dx = 1.0, dt = 1.0;
+    int device = -1;
+
+    OmpImplementationData() = default;
+
     ~OmpImplementationData() {
-    }
-    std::size_t interior_size() const { return ( m_nx * m_ny * m_nz ); }
-    std::size_t total_size() const { return ( (m_nx + 2) * (m_ny + 2) * (m_nz + 2) ); }
-    void pack_params(
-        double* _now, double* _prev, 
-        double* _next, Params& _params
-    ) {
-        m_now_ptr   = _now;
-        m_prev_ptr  = _prev;
-        m_next_ptr  = _next;
-
-        m_d2 = _params.dx * _params.dx;
-        m_dt = _params.dt;
-        m_factor    = m_dt * m_dt / m_d2;
+        // Free target allocations (RAII cleanup).
+        if (device >= 0) {
+            if (d_cs2)    omp_target_free(d_cs2, device);
+            if (d_damp)   omp_target_free(d_damp, device);
+            if (d_u_prev) omp_target_free(d_u_prev, device);
+            if (d_u_now)  omp_target_free(d_u_now, device);
+            if (d_u_next) omp_target_free(d_u_next, device);
+        }
     }
 };
 
+static void device_step(OmpImplementationData &impl) {
+    const std::size_t nx = impl.nx, ny = impl.ny, nz = impl.nz;
+    const std::size_t pny = impl.pny, pnz = impl.pnz;
+    const double dt = impl.dt, dx = impl.dx;
+    const double factor = (dt * dt) / (dx * dx);
+
+    // Strides for padded 3D layout (neighbor access in x/y/z).
+    const std::size_t stride_x = pny * pnz;
+    const std::size_t stride_y = pnz;
+
+    double *const d_cs2    = impl.d_cs2;
+    double *const d_damp   = impl.d_damp;
+    double *const d_u_prev = impl.d_u_prev;
+    double *const d_u_now  = impl.d_u_now;
+    double *const d_u_next = impl.d_u_next;
+
+    // Offload full 3D interior update to the device.
+    #pragma omp target teams distribute parallel for collapse(3) \
+        is_device_ptr(d_cs2, d_damp, d_u_prev, d_u_now, d_u_next)
+    for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(nx); ++i) {
+        for (std::ptrdiff_t j = 0; j < static_cast<std::ptrdiff_t>(ny); ++j) {
+            for (std::ptrdiff_t k = 0; k < static_cast<std::ptrdiff_t>(nz); ++k) {
+                const std::size_t idx_cs =
+                    (static_cast<std::size_t>(i) * ny + static_cast<std::size_t>(j)) * nz +
+                    static_cast<std::size_t>(k);
+
+                // Wave fields are padded, so interior indices are offset by +1.
+                const std::size_t idx =
+                    ((static_cast<std::size_t>(i) + 1) * pny +
+                     (static_cast<std::size_t>(j) + 1)) * pnz +
+                     (static_cast<std::size_t>(k) + 1);
+
+                const double center = d_u_now[idx];
+
+                // 7-point stencil Laplacian contribution.
+                double value = factor * d_cs2[idx_cs] * (
+                    d_u_now[idx - stride_x] + d_u_now[idx + stride_x] +
+                    d_u_now[idx - stride_y] + d_u_now[idx + stride_y] +
+                    d_u_now[idx - 1]        + d_u_now[idx + 1]        -
+                    6.0 * center);
+
+                const double d = d_damp[idx_cs];
+                if (d == 0.0) {
+                    // Fast path for undamped cells.
+                    d_u_next[idx] = 2.0 * center - d_u_prev[idx] + value;
+                } else {
+                    // Damped update (one reciprocal reused).
+                    const double inv_denominator = 1.0 / (1.0 + d * dt);
+                    const double numerator = 1.0 - d * dt;
+                    value *= inv_denominator;
+                    d_u_next[idx] = 2.0 * inv_denominator * center -
+                                    numerator * inv_denominator * d_u_prev[idx] + value;
+                }
+            }
+        }
+    }
+}
+
 OmpWaveSimulation::OmpWaveSimulation() = default;
-OmpWaveSimulation::OmpWaveSimulation(OmpWaveSimulation&&)  noexcept = default;
+OmpWaveSimulation::OmpWaveSimulation(OmpWaveSimulation&&) noexcept = default;
 OmpWaveSimulation& OmpWaveSimulation::operator=(OmpWaveSimulation&&) = default;
 OmpWaveSimulation::~OmpWaveSimulation() = default;
 
 OmpWaveSimulation OmpWaveSimulation::from_cpu_sim(const fs::path& cp, const WaveSimulation& source) {
     OmpWaveSimulation ans;
     out("Initialising {} simulation as copy of {}...", ans.ID(), source.ID());
-    ans.params = source.params;
-    ans.u = source.u.clone();
-    ans.sos = source.sos.clone();
-    ans.cs2 = source.cs2.clone();
-    ans.damp = source.damp.clone();
 
+    // Clone host-side state (used for output/checkpointing and metadata).
+    ans.params = source.params;
+    ans.u    = source.u.clone();
+    ans.sos  = source.sos.clone();
+    ans.cs2  = source.cs2.clone();
+    ans.damp = source.damp.clone();
     ans.checkpoint = cp;
     ans.h5 = H5IO::from_params(cp, ans.params);
 
@@ -71,132 +119,65 @@ OmpWaveSimulation OmpWaveSimulation::from_cpu_sim(const fs::path& cp, const Wave
     ans.h5.put_sos(ans.sos);
     ans.append_u_fields();
 
-    // Perhaps you want to do some device set up now?
-    ans.impl
-        = std::make_unique<OmpImplementationData>(ans);
+    ans.impl = std::make_unique<OmpImplementationData>();
+    auto &im = *ans.impl;
+    auto [nx, ny, nz] = ans.params.shape;
+
+    im.nx = nx; im.ny = ny; im.nz = nz;
+    im.pnx = nx + 2; im.pny = ny + 2; im.pnz = nz + 2; // 1-cell halo on each side
+    im.dx = ans.params.dx; im.dt = ans.params.dt;
+    im.device = omp_get_default_device();
+    const int host_dev = omp_get_initial_device();
+
+    const std::size_t n_cs = static_cast<std::size_t>(nx) * ny * nz;
+    const std::size_t n_u  = static_cast<std::size_t>(im.pnx) * im.pny * im.pnz;
+
+    // Persistent device allocations (avoid per-step map/unmap overhead).
+    im.d_cs2    = static_cast<double*>(omp_target_alloc(n_cs * sizeof(double), im.device));
+    im.d_damp   = static_cast<double*>(omp_target_alloc(n_cs * sizeof(double), im.device));
+    im.d_u_prev = static_cast<double*>(omp_target_alloc(n_u  * sizeof(double), im.device));
+    im.d_u_now  = static_cast<double*>(omp_target_alloc(n_u  * sizeof(double), im.device));
+    im.d_u_next = static_cast<double*>(omp_target_alloc(n_u  * sizeof(double), im.device));
+
+    if (!im.d_cs2 || !im.d_damp || !im.d_u_prev || !im.d_u_now || !im.d_u_next)
+        throw std::runtime_error("OpenMP target allocation failed");
+
+    // One-time host -> device initialization.
+    omp_target_memcpy(im.d_cs2,    ans.cs2.data(),      n_cs * sizeof(double), 0, 0, im.device, host_dev);
+    omp_target_memcpy(im.d_damp,   ans.damp.data(),     n_cs * sizeof(double), 0, 0, im.device, host_dev);
+    omp_target_memcpy(im.d_u_prev, ans.u.prev().data(), n_u  * sizeof(double), 0, 0, im.device, host_dev);
+    omp_target_memcpy(im.d_u_now,  ans.u.now().data(),  n_u  * sizeof(double), 0, 0, im.device, host_dev);
+    omp_target_memcpy(im.d_u_next, ans.u.next().data(), n_u  * sizeof(double), 0, 0, im.device, host_dev);
 
     return ans;
 }
 
-
 void OmpWaveSimulation::append_u_fields() {
+    if (impl) {
+        auto &im = *impl;
+        const std::size_t n_u = im.pnx * im.pny * im.pnz;
+        const int host_dev = omp_get_initial_device();
+
+        // Copy back only when writing output/checkpoints.
+        omp_target_memcpy(u.prev().data(), im.d_u_prev, n_u * sizeof(double), 0, 0, host_dev, im.device);
+        omp_target_memcpy(u.now().data(),  im.d_u_now,  n_u * sizeof(double), 0, 0, host_dev, im.device);
+    }
+
     h5.append_u(u);
 }
 
-static
-void step(
-    std::unique_ptr<OmpImplementationData>& _impl
-) {
-    auto nx         = _impl->m_nx;
-    auto ny         = _impl->m_ny;
-    auto nz         = _impl->m_nz;
-
-    auto nx_tot     = _impl->m_nx + 2;
-    auto ny_tot     = _impl->m_ny + 2;
-    auto nz_tot     = _impl->m_nz + 2;
-
-    auto* now_ptr   = _impl->m_now_ptr;
-    auto* prev_ptr  = _impl->m_prev_ptr;
-    auto* next_ptr  = _impl->m_next_ptr;
-    auto* cs2_ptr   = _impl->m_cs2_ptr;
-    auto* damp_ptr  = _impl->m_damp_ptr;
-
-    auto factor     = _impl->m_factor;
-    auto dt         = _impl->m_dt;
-    
-    auto stride_x = ny_tot*nz_tot;
-    auto stride_y = nz_tot;
-    int idx_c_max = nx * ny * nz;
-    #pragma omp target teams distribute parallel for
-    for (int idx_c = 0; idx_c < idx_c_max; idx_c++) {
-
-        // Recover 3D indices
-        std::size_t i = idx_c / (ny * nz);
-        std::size_t rem = idx_c % (ny * nz);
-        std::size_t j = rem / nz;
-        std::size_t k = rem % nz;
-
-        unsigned ii = i + 1;
-        unsigned jj = j + 1;
-        unsigned kk = k + 1;
-
-        std::size_t idx  = ii*stride_x + jj*stride_y + kk;
-        std::size_t idx_xm = (ii-1)*stride_x + jj*stride_y + kk;
-        std::size_t idx_xp = (ii+1)*stride_x + jj*stride_y + kk;
-        std::size_t idx_ym = ii*stride_x + (jj-1)*stride_y + kk;
-        std::size_t idx_yp = ii*stride_x + (jj+1)*stride_y + kk;
-        std::size_t idx_zm = ii*stride_x + jj*stride_y + (kk-1);
-        std::size_t idx_zp = ii*stride_x + jj*stride_y + (kk+1);
-
-        auto value = factor * cs2_ptr[idx_c] * (
-            now_ptr[idx_xm] + now_ptr[idx_xp] +
-            now_ptr[idx_ym] + now_ptr[idx_yp] +
-            now_ptr[idx_zm] + now_ptr[idx_zp]
-            - 6.0 * now_ptr[idx]
-        );
-
-        auto d = damp_ptr[idx_c];
-
-        if (d == 0.0) {
-            next_ptr[idx] =
-                2.0 * now_ptr[idx]
-                - prev_ptr[idx]
-                + value;
-        } else {
-            auto inv_den = 1.0 / (1.0 + d * dt);
-            auto numerator = 1.0 - d * dt;
-            value *= inv_den;
-
-            next_ptr[idx] =
-                2.0 * inv_den * now_ptr[idx]
-                - numerator * inv_den * prev_ptr[idx]
-                + value;
-        }
-    }
-
-}
-
 void OmpWaveSimulation::run(int n) {
+    auto &im = *impl;
+    for (int step = 0; step < n; ++step) {
+        device_step(im);
 
-    size_t interior_size = impl->interior_size();
-    size_t total_size = impl->total_size();
+        // Rotate time buffers (O(1)) instead of copying arrays.
+        double *temp = im.d_u_prev;
+        im.d_u_prev = im.d_u_now;
+        im.d_u_now  = im.d_u_next;
+        im.d_u_next = temp;
 
-    /* Capture all 3 buffers ONCE (underlying memory never moves) */
-    auto* buf0 = u.now().data();
-    auto* buf1 = u.prev().data();
-    auto* buf2 = u.next().data();
-
-    // ---- OMP Data Movement ---- //
-    #pragma omp target data                 \
-    map(                                    \
-        to:                                 \
-            cs2_ptr[0:interior_size],       \
-            damp_ptr[0:interior_size]       \
-    )                                       \
-    map(                                    \
-        tofrom:                             \
-            buf0[0:total_size],             \
-            buf1[0:total_size],             \
-            buf2[0:total_size]              \
-    )
-    // --------------------------- //
-    {
-        for (int t = 0; t < n; ++t) {
-
-            // ---- Prep Args ---- //
-            impl->pack_params(
-                u.now().data(),
-                u.prev().data(),
-                u.next().data(),
-                params
-            );
-            // ------------------- //
-
-            // ---- OMP GPU Offloading ---- //
-            step(impl);
-            // ---------------------------- //
-
-            u.advance();
-        }
+        // Advance host-side time indexing only (no host data copy here).
+        u.advance();
     }
 }
