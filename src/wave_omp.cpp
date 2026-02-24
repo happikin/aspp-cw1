@@ -85,7 +85,7 @@ void OmpWaveSimulation::append_u_fields() {
 
 static
 void step(
-    std::unique_ptr<OmpImplementationData>& _impl
+    OmpImplementationData* _impl
 ) {
     auto nx         = _impl->m_nx;
     auto ny         = _impl->m_ny;
@@ -171,7 +171,7 @@ void OmpWaveSimulation::run(int n) {
     double* p_now  = buf0;
     double* p_prev = buf1;
     double* p_next = buf2;
-
+    OmpImplementationData* local_impl = impl.get();
     // ---- OMP Data Movement ---- //
     #pragma omp target data                 \
     map(                                    \
@@ -190,7 +190,7 @@ void OmpWaveSimulation::run(int n) {
         for (int t = 0; t < n; ++t) {
 
             // ---- Prep Args ---- //
-            impl->pack_params(
+            local_impl->pack_params(
                 p_now,
                 p_prev,
                 p_next,
@@ -199,7 +199,7 @@ void OmpWaveSimulation::run(int n) {
             // ------------------- //
 
             // ---- OMP GPU Offloading ---- //
-            step(impl);
+            step(local_impl);
             // ---------------------------- //
 
             // Rotate pointers locally (do NOT re-query u.now())
