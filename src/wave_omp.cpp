@@ -162,6 +162,8 @@ void OmpWaveSimulation::run(int n) {
     size_t interior_size = impl->interior_size();
     size_t total_size = impl->total_size();
 
+    auto* cs2_ptr   = cs2.data();
+    auto* damp_ptr  = damp.data();
     /* Capture all 3 buffers ONCE (underlying memory never moves) */
     auto* buf0 = u.now().data();
     auto* buf1 = u.prev().data();
