@@ -164,16 +164,12 @@ void OmpWaveSimulation::run(int n) {
 
     auto* cs2_ptr   = cs2.data();
     auto* damp_ptr  = damp.data();
+    
     /* Capture all 3 buffers ONCE (underlying memory never moves) */
     auto* buf0 = u.now().data();
     auto* buf1 = u.prev().data();
     auto* buf2 = u.next().data();
 
-    // Local rotating pointers (these will change)
-    // double* p_now  = buf0;
-    // double* p_prev = buf1;
-    // double* p_next = buf2;
-    // OmpImplementationData* local_impl = impl.get();
     // ---- OMP Data Movement ---- //
     #pragma omp target data                 \
     map(                                    \
@@ -203,12 +199,6 @@ void OmpWaveSimulation::run(int n) {
             // ---- OMP GPU Offloading ---- //
             step(impl);
             // ---------------------------- //
-
-            // Rotate pointers locally (do NOT re-query u.now())
-            // double* tmp = p_prev;
-            // p_prev = p_now;
-            // p_now  = p_next;
-            // p_next = tmp;
 
             u.advance();
         }
