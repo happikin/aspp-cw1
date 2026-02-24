@@ -159,8 +159,8 @@ void step(
 
 void OmpWaveSimulation::run(int n) {
 
-    size_t interior_size = impl->interior_size();
-    size_t total_size = impl->total_size();
+    size_t _interior_size = impl->interior_size();
+    size_t _total_size = impl->total_size();
 
     /* Capture all 3 buffers ONCE (underlying memory never moves) */
     auto* buf0 = u.now().data();
@@ -171,14 +171,14 @@ void OmpWaveSimulation::run(int n) {
     #pragma omp target data                 \
     map(                                    \
         to:                                 \
-            cs2_ptr[0:interior_size],       \
-            damp_ptr[0:interior_size]       \
+            cs2_ptr[0:_interior_size],       \
+            damp_ptr[0:_interior_size]       \
     )                                       \
     map(                                    \
         tofrom:                             \
-            buf0[0:total_size],             \
-            buf1[0:total_size],             \
-            buf2[0:total_size]              \
+            buf0[0:_total_size],             \
+            buf1[0:_total_size],             \
+            buf2[0:_total_size]              \
     )
     // --------------------------- //
     {
