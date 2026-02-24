@@ -109,7 +109,7 @@ void step(
     int index_max = (int)(nx * ny * nz);
 
     #pragma omp target teams distribute parallel for
-    for (int index = 0; index < index_max; ++index) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(index_max); ++index) {
 
         // Recover 3D indices
         std::size_t i = index / (ny * nz);
