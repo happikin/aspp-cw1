@@ -85,7 +85,7 @@ void OmpWaveSimulation::append_u_fields() {
 
 static
 void step(
-    OmpImplementationData* _impl
+    std::unique_ptr<OmpImplementationData>& _impl
 ) {
     auto nx         = _impl->m_nx;
     auto ny         = _impl->m_ny;
@@ -106,10 +106,10 @@ void step(
     
     auto stride_x = ny_tot*nz_tot;
     auto stride_y = nz_tot;
-    int index_max = (int)(nx * ny * nz);
+    std::size_t index_max = (int)(nx * ny * nz);
 
     #pragma omp target teams distribute parallel for
-    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(index_max); ++index) {
+    for (std::size_t index = 0; index < index_max; ++index) {
 
         // Recover 3D indices
         std::size_t i = index / (ny * nz);
@@ -170,10 +170,10 @@ void OmpWaveSimulation::run(int n) {
     auto* buf2 = u.next().data();
 
     // Local rotating pointers (these will change)
-    double* p_now  = buf0;
-    double* p_prev = buf1;
-    double* p_next = buf2;
-    OmpImplementationData* local_impl = impl.get();
+    // double* p_now  = buf0;
+    // double* p_prev = buf1;
+    // double* p_next = buf2;
+    // OmpImplementationData* local_impl = impl.get();
     // ---- OMP Data Movement ---- //
     #pragma omp target data                 \
     map(                                    \
@@ -192,23 +192,23 @@ void OmpWaveSimulation::run(int n) {
         for (int t = 0; t < n; ++t) {
 
             // ---- Prep Args ---- //
-            local_impl->pack_params(
-                p_now,
-                p_prev,
-                p_next,
+            impl->pack_params(
+                u.now().data(),
+                u.prev().data(),
+                u.next().data(),
                 params
             );
             // ------------------- //
 
             // ---- OMP GPU Offloading ---- //
-            step(local_impl);
+            step(impl);
             // ---------------------------- //
 
             // Rotate pointers locally (do NOT re-query u.now())
-            double* tmp = p_prev;
-            p_prev = p_now;
-            p_now  = p_next;
-            p_next = tmp;
+            // double* tmp = p_prev;
+            // p_prev = p_now;
+            // p_now  = p_next;
+            // p_next = tmp;
 
             u.advance();
         }
