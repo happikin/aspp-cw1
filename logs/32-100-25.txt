@@ -1,0 +1,48 @@
+Initialising CPU simulation from parameters...
+Grid shape: [32, 32, 32]
+Grid spacing: 10 m
+Time step: 0.002 s
+Number of steps: 100
+Output period: 25
+Initial pressure field is pulse in middle of domain
+Speed of sound is simple ocean depth model
+Damping field to avoid reflections in x & y directions (large quiet ocean)
+Write initial conditions to awave-basic-jnvcr-mcxzv.cpu.vtkhdf
+Initialising CUDA simulation as copy of CPU...
+Write initial conditions to awave-basic-jnvcr-mcxzv.cuda.vtkhdf
+Initialising OpenMP simulation as copy of CPU...
+Write initial conditions to awave-basic-jnvcr-mcxzv.omp.vtkhdf
+Starting run with CPU, timing in 4 chunks
+Chunk 0, length = 25, time = 0.003102531 s
+Chunk 1, length = 25, time = 0.002860222 s
+Chunk 2, length = 25, time = 0.00291282 s
+Chunk 3, length = 25, time = 0.002836298 s
+Starting run with CUDA, timing in 4 chunks
+Chunk 0, length = 25, time = 0.001996291 s
+Chunk 1, length = 25, time = 0.001789838 s
+Chunk 2, length = 25, time = 0.001928676 s
+Chunk 3, length = 25, time = 0.001842716 s
+Checking CUDA results...
+Number of differences detected = 0
+Starting run with OpenMP, timing in 4 chunks
+Chunk 0, length = 25, time = 0.006797001 s
+Chunk 1, length = 25, time = 0.001571864 s
+Chunk 2, length = 25, time = 0.001603562 s
+Chunk 3, length = 25, time = 0.001620905 s
+Checking OpenMP results...
+Number of differences detected = 0
+Summary for CPU
+Run time / seconds
+min = 2.836e-03, max = 3.103e-03, mean = 2.928e-03, std = 1.207e-04
+Performance / (site updates per second)
+min = 2.640e+08, max = 2.888e+08, mean = 2.801e+08, std = 1.118e+07
+Summary for CUDA
+Run time / seconds
+min = 1.790e-03, max = 1.996e-03, mean = 1.889e-03, std = 9.140e-05
+Performance / (site updates per second)
+min = 4.104e+08, max = 4.577e+08, mean = 4.343e+08, std = 2.095e+07
+Summary for OpenMP
+Run time / seconds
+min = 1.572e-03, max = 6.797e-03, mean = 2.898e-03, std = 2.599e-03
+Performance / (site updates per second)
+min = 1.205e+08, max = 5.212e+08, mean = 4.145e+08, std = 1.961e+08

@@ -19,17 +19,17 @@ spec:
           - -c
           - >-
             $(KGPU_SUBMIT_DIR)/build-dev/awave
-            -shape 32,32,32
+            -shape 1024,1024,1024 -nsteps 100 -out_period 100
             $(KGPU_JOB_NAME) > $(KGPU_JOB_NAME).log
         resources:
           requests:
-            cpu: 1
-            memory: 16Gi
+            cpu: 4
+            memory: 32Gi
             nvidia.com/gpu: 1
           limits:
-            cpu: 1
-            memory: 16Gi
+            cpu: 8
+            memory: 32Gi
             nvidia.com/gpu: 1
       restartPolicy: Never
       nodeSelector:
-        nvidia.com/gpu.product: NVIDIA-A100-SXM4-40GB-MIG-1g.5gb
+        nvidia.com/gpu.product: NVIDIA-A100-SXM4-40GB

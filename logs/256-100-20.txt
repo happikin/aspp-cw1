@@ -1,0 +1,51 @@
+Initialising CPU simulation from parameters...
+Grid shape: [256, 256, 256]
+Grid spacing: 10 m
+Time step: 0.002 s
+Number of steps: 100
+Output period: 20
+Initial pressure field is pulse in middle of domain
+Speed of sound is simple ocean depth model
+Damping field to avoid reflections in x & y directions (large quiet ocean)
+Write initial conditions to awave-basic-z4v5g-m8wwh.cpu.vtkhdf
+Initialising CUDA simulation as copy of CPU...
+Write initial conditions to awave-basic-z4v5g-m8wwh.cuda.vtkhdf
+Initialising OpenMP simulation as copy of CPU...
+Write initial conditions to awave-basic-z4v5g-m8wwh.omp.vtkhdf
+Starting run with CPU, timing in 5 chunks
+Chunk 0, length = 20, time = 1.2619516 s
+Chunk 1, length = 20, time = 1.2692107 s
+Chunk 2, length = 20, time = 1.2513741 s
+Chunk 3, length = 20, time = 1.3192331 s
+Chunk 4, length = 20, time = 1.2961446 s
+Starting run with CUDA, timing in 5 chunks
+Chunk 0, length = 20, time = 0.14837421 s
+Chunk 1, length = 20, time = 0.145143 s
+Chunk 2, length = 20, time = 0.14274846 s
+Chunk 3, length = 20, time = 0.14269488 s
+Chunk 4, length = 20, time = 0.14121053 s
+Checking CUDA results...
+Number of differences detected = 0
+Starting run with OpenMP, timing in 5 chunks
+Chunk 0, length = 20, time = 0.12685835 s
+Chunk 1, length = 20, time = 0.12142291 s
+Chunk 2, length = 20, time = 0.123206675 s
+Chunk 3, length = 20, time = 0.1262204 s
+Chunk 4, length = 20, time = 0.12823111 s
+Checking OpenMP results...
+Number of differences detected = 0
+Summary for CPU
+Run time / seconds
+min = 1.251e+00, max = 1.319e+00, mean = 1.280e+00, std = 2.766e-02
+Performance / (site updates per second)
+min = 2.543e+08, max = 2.681e+08, mean = 2.623e+08, std = 5.618e+06
+Summary for CUDA
+Run time / seconds
+min = 1.412e-01, max = 1.484e-01, mean = 1.440e-01, std = 2.806e-03
+Performance / (site updates per second)
+min = 2.261e+09, max = 2.376e+09, mean = 2.330e+09, std = 4.485e+07
+Summary for OpenMP
+Run time / seconds
+min = 1.214e-01, max = 1.282e-01, mean = 1.252e-01, std = 2.794e-03
+Performance / (site updates per second)
+min = 2.617e+09, max = 2.763e+09, mean = 2.681e+09, std = 6.027e+07

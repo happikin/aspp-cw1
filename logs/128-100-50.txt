@@ -1,0 +1,42 @@
+Initialising CPU simulation from parameters...
+Grid shape: [128, 128, 128]
+Grid spacing: 10 m
+Time step: 0.002 s
+Number of steps: 100
+Output period: 50
+Initial pressure field is pulse in middle of domain
+Speed of sound is simple ocean depth model
+Damping field to avoid reflections in x & y directions (large quiet ocean)
+Write initial conditions to awave-basic-fxvpm-97fgb.cpu.vtkhdf
+Initialising CUDA simulation as copy of CPU...
+Write initial conditions to awave-basic-fxvpm-97fgb.cuda.vtkhdf
+Initialising OpenMP simulation as copy of CPU...
+Write initial conditions to awave-basic-fxvpm-97fgb.omp.vtkhdf
+Starting run with CPU, timing in 2 chunks
+Chunk 0, length = 50, time = 0.3961815 s
+Chunk 1, length = 50, time = 0.39378628 s
+Starting run with CUDA, timing in 2 chunks
+Chunk 0, length = 50, time = 0.026906133 s
+Chunk 1, length = 50, time = 0.026099458 s
+Checking CUDA results...
+Number of differences detected = 0
+Starting run with OpenMP, timing in 2 chunks
+Chunk 0, length = 50, time = 0.027475428 s
+Chunk 1, length = 50, time = 0.025553916 s
+Checking OpenMP results...
+Number of differences detected = 0
+Summary for CPU
+Run time / seconds
+min = 3.938e-01, max = 3.962e-01, mean = 3.950e-01, std = 1.694e-03
+Performance / (site updates per second)
+min = 2.647e+08, max = 2.663e+08, mean = 2.655e+08, std = 1.138e+06
+Summary for CUDA
+Run time / seconds
+min = 2.610e-02, max = 2.691e-02, mean = 2.650e-02, std = 5.704e-04
+Performance / (site updates per second)
+min = 3.897e+09, max = 4.018e+09, mean = 3.957e+09, std = 8.517e+07
+Summary for OpenMP
+Run time / seconds
+min = 2.555e-02, max = 2.748e-02, mean = 2.651e-02, std = 1.359e-03
+Performance / (site updates per second)
+min = 3.816e+09, max = 4.103e+09, mean = 3.960e+09, std = 2.029e+08

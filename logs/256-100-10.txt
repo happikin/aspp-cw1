@@ -1,0 +1,66 @@
+Initialising CPU simulation from parameters...
+Grid shape: [256, 256, 256]
+Grid spacing: 10 m
+Time step: 0.002 s
+Number of steps: 100
+Output period: 10
+Initial pressure field is pulse in middle of domain
+Speed of sound is simple ocean depth model
+Damping field to avoid reflections in x & y directions (large quiet ocean)
+Write initial conditions to awave-basic-6pp4h-hgdw9.cpu.vtkhdf
+Initialising CUDA simulation as copy of CPU...
+Write initial conditions to awave-basic-6pp4h-hgdw9.cuda.vtkhdf
+Initialising OpenMP simulation as copy of CPU...
+Write initial conditions to awave-basic-6pp4h-hgdw9.omp.vtkhdf
+Starting run with CPU, timing in 10 chunks
+Chunk 0, length = 10, time = 0.61933726 s
+Chunk 1, length = 10, time = 0.6081316 s
+Chunk 2, length = 10, time = 0.61445826 s
+Chunk 3, length = 10, time = 0.6144852 s
+Chunk 4, length = 10, time = 0.61233926 s
+Chunk 5, length = 10, time = 0.6155787 s
+Chunk 6, length = 10, time = 0.6140104 s
+Chunk 7, length = 10, time = 0.61401504 s
+Chunk 8, length = 10, time = 0.6142545 s
+Chunk 9, length = 10, time = 0.6156039 s
+Starting run with CUDA, timing in 10 chunks
+Chunk 0, length = 10, time = 0.20866796 s
+Chunk 1, length = 10, time = 0.20760208 s
+Chunk 2, length = 10, time = 0.20811282 s
+Chunk 3, length = 10, time = 0.20658405 s
+Chunk 4, length = 10, time = 0.20889999 s
+Chunk 5, length = 10, time = 0.20959376 s
+Chunk 6, length = 10, time = 0.21103895 s
+Chunk 7, length = 10, time = 0.20933652 s
+Chunk 8, length = 10, time = 0.21011719 s
+Chunk 9, length = 10, time = 0.2108493 s
+Checking CUDA results...
+Number of differences detected = 0
+Starting run with OpenMP, timing in 10 chunks
+Chunk 0, length = 10, time = 0.19027165 s
+Chunk 1, length = 10, time = 0.19369169 s
+Chunk 2, length = 10, time = 0.1948511 s
+Chunk 3, length = 10, time = 0.19247758 s
+Chunk 4, length = 10, time = 0.19633314 s
+Chunk 5, length = 10, time = 0.1929027 s
+Chunk 6, length = 10, time = 0.18962581 s
+Chunk 7, length = 10, time = 0.19415651 s
+Chunk 8, length = 10, time = 0.19467688 s
+Chunk 9, length = 10, time = 0.19244911 s
+Checking OpenMP results...
+Number of differences detected = 0
+Summary for CPU
+Run time / seconds
+min = 6.081e-01, max = 6.193e-01, mean = 6.142e-01, std = 2.804e-03
+Performance / (site updates per second)
+min = 2.709e+08, max = 2.759e+08, mean = 2.732e+08, std = 1.250e+06
+Summary for CUDA
+Run time / seconds
+min = 2.066e-01, max = 2.110e-01, mean = 2.091e-01, std = 1.411e-03
+Performance / (site updates per second)
+min = 7.950e+08, max = 8.121e+08, mean = 8.025e+08, std = 5.425e+06
+Summary for OpenMP
+Run time / seconds
+min = 1.896e-01, max = 1.963e-01, mean = 1.931e-01, std = 2.065e-03
+Performance / (site updates per second)
+min = 8.545e+08, max = 8.848e+08, mean = 8.687e+08, std = 9.321e+06

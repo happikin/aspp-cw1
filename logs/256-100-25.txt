@@ -1,0 +1,48 @@
+Initialising CPU simulation from parameters...
+Grid shape: [256, 256, 256]
+Grid spacing: 10 m
+Time step: 0.002 s
+Number of steps: 100
+Output period: 25
+Initial pressure field is pulse in middle of domain
+Speed of sound is simple ocean depth model
+Damping field to avoid reflections in x & y directions (large quiet ocean)
+Write initial conditions to awave-basic-dvntw-t22lc.cpu.vtkhdf
+Initialising CUDA simulation as copy of CPU...
+Write initial conditions to awave-basic-dvntw-t22lc.cuda.vtkhdf
+Initialising OpenMP simulation as copy of CPU...
+Write initial conditions to awave-basic-dvntw-t22lc.omp.vtkhdf
+Starting run with CPU, timing in 4 chunks
+Chunk 0, length = 25, time = 1.6866865 s
+Chunk 1, length = 25, time = 1.6562284 s
+Chunk 2, length = 25, time = 1.7484679 s
+Chunk 3, length = 25, time = 1.817814 s
+Starting run with CUDA, timing in 4 chunks
+Chunk 0, length = 25, time = 0.17897123 s
+Chunk 1, length = 25, time = 0.16541147 s
+Chunk 2, length = 25, time = 0.16398956 s
+Chunk 3, length = 25, time = 0.1690382 s
+Checking CUDA results...
+Number of differences detected = 0
+Starting run with OpenMP, timing in 4 chunks
+Chunk 0, length = 25, time = 0.1618765 s
+Chunk 1, length = 25, time = 0.15395248 s
+Chunk 2, length = 25, time = 0.15148224 s
+Chunk 3, length = 25, time = 0.14788374 s
+Checking OpenMP results...
+Number of differences detected = 0
+Summary for CPU
+Run time / seconds
+min = 1.656e+00, max = 1.818e+00, mean = 1.727e+00, std = 7.151e-02
+Performance / (site updates per second)
+min = 2.307e+08, max = 2.532e+08, mean = 2.431e+08, std = 9.953e+06
+Summary for CUDA
+Run time / seconds
+min = 1.640e-01, max = 1.790e-01, mean = 1.694e-01, std = 6.756e-03
+Performance / (site updates per second)
+min = 2.344e+09, max = 2.558e+09, mean = 2.480e+09, std = 9.617e+07
+Summary for OpenMP
+Run time / seconds
+min = 1.479e-01, max = 1.619e-01, mean = 1.538e-01, std = 5.934e-03
+Performance / (site updates per second)
+min = 2.591e+09, max = 2.836e+09, mean = 2.730e+09, std = 1.035e+08

@@ -1,0 +1,48 @@
+Initialising CPU simulation from parameters...
+Grid shape: [128, 128, 128]
+Grid spacing: 10 m
+Time step: 0.002 s
+Number of steps: 100
+Output period: 25
+Initial pressure field is pulse in middle of domain
+Speed of sound is simple ocean depth model
+Damping field to avoid reflections in x & y directions (large quiet ocean)
+Write initial conditions to awave-basic-8gdss-jm2wf.cpu.vtkhdf
+Initialising CUDA simulation as copy of CPU...
+Write initial conditions to awave-basic-8gdss-jm2wf.cuda.vtkhdf
+Initialising OpenMP simulation as copy of CPU...
+Write initial conditions to awave-basic-8gdss-jm2wf.omp.vtkhdf
+Starting run with CPU, timing in 4 chunks
+Chunk 0, length = 25, time = 0.24656388 s
+Chunk 1, length = 25, time = 0.24454358 s
+Chunk 2, length = 25, time = 0.21209052 s
+Chunk 3, length = 25, time = 0.24616289 s
+Starting run with CUDA, timing in 4 chunks
+Chunk 0, length = 25, time = 0.031825826 s
+Chunk 1, length = 25, time = 0.030930337 s
+Chunk 2, length = 25, time = 0.03230821 s
+Chunk 3, length = 25, time = 0.033368323 s
+Checking CUDA results...
+Number of differences detected = 0
+Starting run with OpenMP, timing in 4 chunks
+Chunk 0, length = 25, time = 0.037268233 s
+Chunk 1, length = 25, time = 0.029305464 s
+Chunk 2, length = 25, time = 0.0307118 s
+Chunk 3, length = 25, time = 0.030660937 s
+Checking OpenMP results...
+Number of differences detected = 0
+Summary for CPU
+Run time / seconds
+min = 2.121e-01, max = 2.466e-01, mean = 2.373e-01, std = 1.686e-02
+Performance / (site updates per second)
+min = 2.126e+08, max = 2.472e+08, mean = 2.218e+08, std = 1.695e+07
+Summary for CUDA
+Run time / seconds
+min = 3.093e-02, max = 3.337e-02, mean = 3.211e-02, std = 1.016e-03
+Performance / (site updates per second)
+min = 1.571e+09, max = 1.695e+09, mean = 1.634e+09, std = 5.156e+07
+Summary for OpenMP
+Run time / seconds
+min = 2.931e-02, max = 3.727e-02, mean = 3.199e-02, std = 3.581e-03
+Performance / (site updates per second)
+min = 1.407e+09, max = 1.789e+09, mean = 1.653e+09, std = 1.686e+08
