@@ -159,26 +159,31 @@ void step(
 
 void OmpWaveSimulation::run(int n) {
 
-    size_t _interior_size = impl->interior_size();
-    size_t _total_size = impl->total_size();
+    size_t interior_size = impl->interior_size();
+    size_t total_size = impl->total_size();
 
     /* Capture all 3 buffers ONCE (underlying memory never moves) */
     auto* buf0 = u.now().data();
     auto* buf1 = u.prev().data();
     auto* buf2 = u.next().data();
 
+    // Local rotating pointers (these will change)
+    double* p_now  = buf0;
+    double* p_prev = buf1;
+    double* p_next = buf2;
+
     // ---- OMP Data Movement ---- //
     #pragma omp target data                 \
     map(                                    \
         to:                                 \
-            cs2_ptr[0:_interior_size],       \
-            damp_ptr[0:_interior_size]       \
+            cs2_ptr[0:interior_size],       \
+            damp_ptr[0:interior_size]       \
     )                                       \
     map(                                    \
         tofrom:                             \
-            buf0[0:_total_size],             \
-            buf1[0:_total_size],             \
-            buf2[0:_total_size]              \
+            buf0[0:total_size],             \
+            buf1[0:total_size],             \
+            buf2[0:total_size]              \
     )
     // --------------------------- //
     {
@@ -186,9 +191,9 @@ void OmpWaveSimulation::run(int n) {
 
             // ---- Prep Args ---- //
             impl->pack_params(
-                u.now().data(),
-                u.prev().data(),
-                u.next().data(),
+                p_now,
+                p_prev,
+                p_next,
                 params
             );
             // ------------------- //
@@ -196,6 +201,12 @@ void OmpWaveSimulation::run(int n) {
             // ---- OMP GPU Offloading ---- //
             step(impl);
             // ---------------------------- //
+
+            // Rotate pointers locally (do NOT re-query u.now())
+            double* tmp = p_prev;
+            p_prev = p_now;
+            p_now  = p_next;
+            p_next = tmp;
 
             u.advance();
         }
